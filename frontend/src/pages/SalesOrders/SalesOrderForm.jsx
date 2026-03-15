@@ -8,6 +8,7 @@ function SalesOrderForm({
   editId,
   customers,
   products,
+  statusOptions,
   isOpen,
   onChange,
   onSubmit,
@@ -68,6 +69,12 @@ function SalesOrderForm({
 
       {isOpen && (
         <>
+          {errors.general && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errors.general}
+            </div>
+          )}
+
           <p className="mb-4 text-sm text-gray-500">
             <span className="font-medium text-red-500">*</span> Required fields
           </p>
@@ -119,11 +126,11 @@ function SalesOrderForm({
                 onChange={(e) => onChange("status", e.target.value)}
                 className={inputClassName("status")}
               >
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
+                {statusOptions.map((statusOption) => (
+                  <option key={statusOption.value} value={statusOption.value}>
+                    {statusOption.label}
+                  </option>
+                ))}
               </select>
             </div>
 

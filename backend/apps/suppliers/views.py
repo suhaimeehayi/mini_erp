@@ -1,5 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.serializers import ValidationError
 
 from apps.accounts.permissions import HasAssignedPermission
 from .models import Supplier
@@ -20,3 +21,9 @@ class SupplierListCreateAPIView(viewsets.ModelViewSet):
         'destroy': 'delete_suppliers',
     }
     ordering_fields = ['name', 'company_name', 'contact_person', 'email', 'phone', 'status']
+
+    def perform_destroy(self, instance):
+        if instance.product_set.exists() or instance.purchaseorder_set.exists():
+            raise ValidationError('This supplier is used in products or purchase orders and cannot be deleted.')
+
+        super().perform_destroy(instance)

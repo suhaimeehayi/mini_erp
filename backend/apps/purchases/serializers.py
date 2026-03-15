@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.suppliers.models import Supplier
+
 from .models import PurchaseOrder, PurchaseOrderItem
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
@@ -40,6 +42,17 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'item_quantity',
             'item_unit_price',
         ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        supplier = attrs.get('supplier', getattr(self.instance, 'supplier', None))
+        if supplier and supplier.status != 'active':
+            raise serializers.ValidationError({
+                'supplier': 'Inactive suppliers cannot be used for purchase orders.',
+            })
+
+        return attrs
 
     def _extract_items_data(self, validated_data):
         items_data = validated_data.pop('items_data', [])

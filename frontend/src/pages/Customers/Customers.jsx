@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 
 import CustomerForm from "./CustomerForm";
 import CustomerDetail from "./CustomerDetail";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   name: "",
@@ -13,6 +14,34 @@ const initialFormData = {
   address: "",
   taxNumber: "",
   status: "active",
+};
+
+const extractErrorMessage = (error, fallbackMessage) => {
+  const errorData = error?.response?.data;
+
+  if (Array.isArray(errorData) && errorData.length > 0) {
+    return errorData[0];
+  }
+
+  if (typeof errorData === "string") {
+    return errorData;
+  }
+
+  if (errorData?.detail) {
+    return errorData.detail;
+  }
+
+  if (errorData && typeof errorData === "object") {
+    const firstValue = Object.values(errorData)[0];
+    if (Array.isArray(firstValue) && firstValue.length > 0) {
+      return firstValue[0];
+    }
+    if (typeof firstValue === "string") {
+      return firstValue;
+    }
+  }
+
+  return fallbackMessage;
 };
 
 function Customers() {
@@ -127,6 +156,13 @@ function Customers() {
         [field]: undefined,
       }));
     }
+
+    if (errors.general) {
+      setErrors((previousErrors) => ({
+        ...previousErrors,
+        general: undefined,
+      }));
+    }
   };
 
   const handleViewCustomer = async (customer) => {
@@ -230,14 +266,10 @@ function Customers() {
 
     try {
       await api.delete(`/customers/${id}/`);
-
-      if (selectedCustomer?.id === id) {
-        setSelectedCustomer(null);
-      }
-
-      await fetchPage(currentPage, currentSearch);
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
+      setErrors({ general: extractErrorMessage(error, "Unable to delete customer.") });
     }
   };
 

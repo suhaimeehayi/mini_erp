@@ -97,3 +97,18 @@ class ProductApiTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.assertEqual(response.data['name'][0], 'Product name and SKU combination already exists.')
 		self.assertEqual(response.data['sku'][0], 'Product name and SKU combination already exists.')
+
+	def test_create_product_rejects_inactive_supplier(self):
+		self.supplier.status = 'inactive'
+		self.supplier.save(update_fields=['status'])
+
+		response = self.client.post(self.endpoint, {
+			'name': 'Keyboard',
+			'sku': 'KB-003',
+			'description': 'Mechanical keyboard',
+			'price': '1500.00',
+			'supplier_id': self.supplier.id,
+		}, format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(response.data['supplier_id'][0], 'Inactive suppliers cannot be used for products.')

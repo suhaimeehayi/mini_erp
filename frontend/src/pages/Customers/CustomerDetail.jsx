@@ -182,48 +182,56 @@ function CustomerDetail({
                   Loading customer detail...
                 </div>
               ) : selectedCustomer ? (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Name</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.name || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Company</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.company || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Phone</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.phone || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Email</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.email || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Tax Number</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.tax_number || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Status</p>
-                    <p className="font-medium text-gray-900 capitalize">
-                      {selectedCustomer.status || "-"}
-                    </p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-gray-500">Address</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedCustomer.address || "-"}
-                    </p>
+                <div className="mt-4 space-y-4 text-sm">
+                  {selectedCustomer.status === "inactive" && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      This customer is inactive and cannot be used for new sales orders.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.name || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Company</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.company || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Phone</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.phone || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Email</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.email || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Tax Number</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.tax_number || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Status</p>
+                      <p className="font-medium text-gray-900 capitalize">
+                        {selectedCustomer.status || "-"}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-gray-500">Address</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedCustomer.address || "-"}
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : (

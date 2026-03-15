@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.inventory.models import Inventory
@@ -30,7 +31,28 @@ class SalesOrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'order_id', 'customer', 'customer_name', 'date', 'total', 'status', 'inventory_deducted', 'created_at', 'updated_at', 'items', 'items_data']
 
     def _should_deduct_inventory(self, status_value):
-        return status_value in ['shipped', 'delivered']
+        return status_value == SalesOrder.STATUS_DELIVERED
+
+    def _get_status_after_update(self, attrs):
+        if self.instance is None:
+            return attrs.get('status', SalesOrder.STATUS_PENDING)
+        return attrs.get('status', self.instance.status)
+
+    def _get_items_for_inventory_validation(self, items_data):
+        if items_data is not None:
+            return items_data
+
+        if self.instance is None:
+            return []
+
+        return [
+            {
+                'product': item.product_id,
+                'quantity': item.quantity,
+                'unit_price': item.unit_price,
+            }
+            for item in self.instance.items.all()
+        ]
 
     def _validate_inventory(self, items_data):
         for item_data in items_data:
@@ -46,6 +68,35 @@ class SalesOrderSerializer(serializers.ModelSerializer):
                     f"Insufficient inventory for product {inventory.product.name}. "
                     f"Available: {inventory.quantity}, Requested: {item_data['quantity']}"
                 )
+
+    def validate(self, attrs):
+        instance = self.instance
+        next_status = self._get_status_after_update(attrs)
+        items_data = attrs.get('items_data')
+        customer = attrs.get('customer', getattr(instance, 'customer', None))
+
+        if customer and customer.status != 'active':
+            raise serializers.ValidationError({
+                'customer': 'Inactive customers cannot be used for sales orders.',
+            })
+
+        if instance and instance.status == SalesOrder.STATUS_DELIVERED:
+            raise serializers.ValidationError('Delivered sales orders cannot be modified.')
+
+        if instance and next_status != instance.status and not instance.can_change_status_to(next_status):
+            raise serializers.ValidationError(
+                {'status': f'Invalid status transition from {instance.status} to {next_status}'}
+            )
+
+        if instance and items_data is not None and instance.inventory_deducted:
+            raise serializers.ValidationError(
+                {'items_data': 'Cannot replace items after inventory has already been deducted.'}
+            )
+
+        if self._should_deduct_inventory(next_status):
+            self._validate_inventory(self._get_items_for_inventory_validation(items_data))
+
+        return attrs
 
     def _replace_items(self, sales_order, items_data):
         sales_order.items.all().delete()
@@ -70,39 +121,31 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = validated_data.pop('items_data', [])
 
-        if self._should_deduct_inventory(validated_data.get('status', SalesOrder.STATUS_CHOICES[0][0])):
-            self._validate_inventory(items_data)
+        with transaction.atomic():
+            sales_order = SalesOrder.objects.create(**validated_data)
+            self._replace_items(sales_order, items_data)
 
-        sales_order = SalesOrder.objects.create(**validated_data)
-        self._replace_items(sales_order, items_data)
-
-        if self._should_deduct_inventory(sales_order.status):
-            try:
-                sales_order.deduct_inventory()
-            except ValueError as exc:
-                raise serializers.ValidationError(str(exc)) from exc
+            if self._should_deduct_inventory(sales_order.status):
+                try:
+                    sales_order.deduct_inventory()
+                except ValueError as exc:
+                    raise serializers.ValidationError(str(exc)) from exc
 
         return sales_order
 
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items_data', None)
-        instance = super().update(instance, validated_data)
 
-        if items_data is not None:
-            if instance.inventory_deducted:
-                raise serializers.ValidationError(
-                    'Cannot replace items after inventory has already been deducted.'
-                )
+        with transaction.atomic():
+            instance = super().update(instance, validated_data)
 
-            if self._should_deduct_inventory(instance.status):
-                self._validate_inventory(items_data)
+            if items_data is not None:
+                self._replace_items(instance, items_data)
 
-            self._replace_items(instance, items_data)
-
-        if self._should_deduct_inventory(instance.status) and not instance.inventory_deducted:
-            try:
-                instance.deduct_inventory()
-            except ValueError as exc:
-                raise serializers.ValidationError(str(exc)) from exc
+            if self._should_deduct_inventory(instance.status) and not instance.inventory_deducted:
+                try:
+                    instance.deduct_inventory()
+                except ValueError as exc:
+                    raise serializers.ValidationError(str(exc)) from exc
 
         return instance

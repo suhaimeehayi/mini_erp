@@ -152,17 +152,29 @@ function DataTable({ data = [], columns, actions = [], loading = false, onSort }
 
                     <td className="flex gap-2 p-4">
 
-                      {actions.map((action, index) => (
+                      {actions.map((action, index) => {
+                        const isDisabled = typeof action.disabled === "function"
+                          ? action.disabled(item)
+                          : Boolean(action.disabled);
+                        const className = typeof action.className === "function"
+                          ? action.className(item, isDisabled)
+                          : action.className;
+                        const title = typeof action.title === "function"
+                          ? action.title(item, isDisabled)
+                          : action.title;
 
-                        <button
-                          key={index}
-                          onClick={() => action.onClick(item)}
-                          className={action.className}
-                        >
-                          {action.label}
-                        </button>
-
-                      ))}
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => action.onClick(item)}
+                            className={className}
+                            disabled={isDisabled}
+                            title={title}
+                          >
+                            {action.label}
+                          </button>
+                        );
+                      })}
 
                     </td>
 

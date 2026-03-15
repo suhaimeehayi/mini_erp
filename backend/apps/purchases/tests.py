@@ -86,3 +86,23 @@ class PurchaseOrderApiTests(APITestCase):
 		purchase_order.refresh_from_db()
 		self.assertEqual(purchase_order.items.count(), 1)
 		self.assertEqual(purchase_order.total_amount, Decimal('450.00'))
+
+	def test_create_purchase_order_rejects_inactive_supplier(self):
+		self.supplier.status = 'inactive'
+		self.supplier.save(update_fields=['status'])
+
+		response = self.client.post(self.endpoint, {
+			'supplier': self.supplier.id,
+			'order_date': '2026-03-15',
+			'status': 'pending',
+			'items_data': [
+				{
+					'product': self.product.id,
+					'quantity': 2,
+					'unit_price': '120.00',
+				},
+			],
+		}, format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(response.data['supplier'][0], 'Inactive suppliers cannot be used for purchase orders.')

@@ -45,6 +45,12 @@ class ProductSerializer(serializers.ModelSerializer):
 
         name = attrs.get('name', getattr(self.instance, 'name', '')).strip()
         sku = attrs.get('sku', getattr(self.instance, 'sku', '')).strip()
+        supplier = attrs.get('supplier', getattr(self.instance, 'supplier', None))
+
+        if supplier and supplier.status != 'active':
+            raise serializers.ValidationError({
+                'supplier_id': 'Inactive suppliers cannot be used for products.',
+            })
 
         if not name or not sku:
             return attrs

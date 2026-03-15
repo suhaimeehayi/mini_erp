@@ -3,6 +3,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Permission
+from apps.products.models import Product
+from apps.sales.models import SalesOrder
+from apps.suppliers.models import Supplier
 from .models import Customer
 
 
@@ -74,3 +77,50 @@ class CustomerApiTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		customer.refresh_from_db()
 		self.assertEqual(customer.status, 'inactive')
+
+	def test_delete_customer_used_in_sales_order_is_blocked(self):
+		user = User.objects.create_user(username='customer_delete_guard', password='pass1234')
+		user.userprofile.direct_permissions.add(
+			Permission.objects.create(name='Can delete customers', codename='delete_customers'),
+		)
+		self.client.force_authenticate(user)
+
+		supplier = Supplier.objects.create(
+			name='Supplier A',
+			company_name='Supplier Co',
+			email='supplier@example.com',
+			phone='0812345678',
+			address='Bangkok',
+		)
+		customer = Customer.objects.create(
+			name='Acme Customer',
+			email='customer@example.com',
+			phone='0812345678',
+			address='Bangkok',
+			company='Acme Co',
+			tax_number='TAX-001',
+			status='active',
+		)
+		product = Product.objects.create(
+			name='Widget',
+			sku='W-001',
+			description='Widget',
+			price='100.00',
+			supplier=supplier,
+		)
+		sales_order = SalesOrder.objects.create(
+			customer=customer,
+			date='2026-03-15',
+			status='pending',
+		)
+		sales_order.items.create(
+			product=product,
+			quantity=1,
+			unit_price='100.00',
+			total_price='100.00',
+		)
+
+		response = self.client.delete(f'{self.endpoint}{customer.id}/')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(response.data[0], 'This customer is used in sales orders and cannot be deleted.')

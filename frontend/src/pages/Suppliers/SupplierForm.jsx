@@ -50,6 +50,18 @@ function SupplierForm({
 
       {isOpen && (
         <>
+          {errors.general && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errors.general}
+            </div>
+          )}
+
+          {formData.status === "inactive" && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Inactive suppliers cannot be used in products or purchase orders.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div>
               {renderLabel("Name", true)}

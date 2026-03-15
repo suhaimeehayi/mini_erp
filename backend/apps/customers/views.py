@@ -1,5 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.serializers import ValidationError
 
 from apps.accounts.permissions import HasAssignedPermission
 from .models import Customer
@@ -19,3 +20,9 @@ class CustomerListCreateAPIView(viewsets.ModelViewSet):
         'partial_update': 'change_customers',
         'destroy': 'delete_customers',
     }
+
+    def perform_destroy(self, instance):
+        if instance.salesorder_set.exists():
+            raise ValidationError('This customer is used in sales orders and cannot be deleted.')
+
+        super().perform_destroy(instance)

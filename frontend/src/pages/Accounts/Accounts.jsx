@@ -15,6 +15,7 @@ import {
   updateRole,
   updateUser,
 } from "../../services/accountService";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialUserForm = {
   username: "",
@@ -311,13 +312,7 @@ function Accounts() {
 
     try {
       await deleteUser(user.id);
-      if (editingUserId === user.id) {
-        resetUserForm();
-      }
-      if (selectedUser?.id === user.id) {
-        setSelectedUser(null);
-      }
-      await loadData();
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
     }
@@ -373,10 +368,7 @@ function Accounts() {
 
     try {
       await deleteRole(role.id);
-      if (editingRoleId === role.id) {
-        resetRoleForm();
-      }
-      await loadData();
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
     }

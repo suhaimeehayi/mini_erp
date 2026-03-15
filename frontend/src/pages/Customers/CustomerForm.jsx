@@ -44,6 +44,18 @@ function CustomerForm({ formSectionRef, formData, errors, editId, isOpen, onChan
 
 			{isOpen && (
 			<>
+			{errors.general && (
+				<div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+					{errors.general}
+				</div>
+			)}
+
+			{formData.status === "inactive" && (
+				<div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					Inactive customers cannot be used to create new sales orders.
+				</div>
+			)}
+
 			<p className="mb-4 text-sm text-gray-500">
 				<span className="font-medium text-red-500">*</span> Required fields
 			</p>

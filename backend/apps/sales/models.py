@@ -17,20 +17,25 @@ class SalesOrderItem(models.Model):
         return f'{self.product.name} x {self.quantity}'
 
 class SalesOrder(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_PAID = 'paid'
+    STATUS_SHIPPING = 'shipping'
+    STATUS_DELIVERED = 'delivered'
+    STATUS_CANCELLED = 'cancelled'
+
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('paid', 'Paid'),
-        ('shipped', 'Shipped'),
-        ('delivered', 'Delivered'),
-        ('cancelled', 'Cancelled'),
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_SHIPPING, 'Shipping'),
+        (STATUS_DELIVERED, 'Delivered'),
+        (STATUS_CANCELLED, 'Cancelled'),
     ]
 
     order_id = models.CharField(max_length=20, unique=True, blank=True)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     date = models.DateField()
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     inventory_deducted = models.BooleanField(default=False)  # Track if inventory has been deducted
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,12 +77,11 @@ class SalesOrder(models.Model):
     def can_change_status_to(self, new_status):
         """Validate status workflow transitions."""
         valid_transitions = {
-            'pending': ['confirmed', 'cancelled'],
-            'confirmed': ['paid', 'cancelled'],
-            'paid': ['shipped', 'cancelled'],
-            'shipped': ['delivered'],
-            'delivered': [],  # Final state
-            'cancelled': [],  # Final state
+            self.STATUS_PENDING: [self.STATUS_PAID, self.STATUS_CANCELLED],
+            self.STATUS_PAID: [self.STATUS_SHIPPING, self.STATUS_CANCELLED],
+            self.STATUS_SHIPPING: [self.STATUS_DELIVERED],
+            self.STATUS_DELIVERED: [],
+            self.STATUS_CANCELLED: [],
         }
         return new_status in valid_transitions.get(self.status, [])
 
@@ -85,13 +89,11 @@ class SalesOrder(models.Model):
         """Change status with validation and inventory handling."""
         if not self.can_change_status_to(new_status):
             raise ValueError(f"Invalid status transition from {self.status} to {new_status}")
-        
-        old_status = self.status
+
         self.status = new_status
         self.save(update_fields=['status'])
-        
-        # Deduct inventory when shipping
-        if new_status in ['shipped', 'delivered'] and not self.inventory_deducted:
+
+        if new_status == self.STATUS_DELIVERED and not self.inventory_deducted:
             self.deduct_inventory()
 
     def __str__(self):

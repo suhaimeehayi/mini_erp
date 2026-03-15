@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Permission
+from apps.products.models import Product
 from .models import Supplier
 
 
@@ -80,3 +81,34 @@ class SupplierApiTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		supplier.refresh_from_db()
 		self.assertEqual(supplier.status, 'inactive')
+
+	def test_delete_supplier_used_in_products_is_blocked(self):
+		user = User.objects.create_user(username='supplier_delete_guard', password='pass1234')
+		user.userprofile.direct_permissions.add(
+			Permission.objects.create(name='Can delete suppliers', codename='delete_suppliers'),
+		)
+		self.client.force_authenticate(user)
+
+		supplier = Supplier.objects.create(
+			name='Supplier A',
+			company_name='Supplier Co',
+			contact_person='Jane Doe',
+			email='supplier@example.com',
+			phone='0899999999',
+			address='Bangkok',
+			tax_number='SUP-001',
+			website='https://example.com',
+			status='active',
+		)
+		Product.objects.create(
+			name='Paper',
+			sku='PAPER-001',
+			description='Copy paper',
+			price='120.00',
+			supplier=supplier,
+		)
+
+		response = self.client.delete(f'{self.endpoint}{supplier.id}/')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(response.data[0], 'This supplier is used in products or purchase orders and cannot be deleted.')

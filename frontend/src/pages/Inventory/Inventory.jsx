@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import InventoryDetail from "./InventoryDetail";
 import InventoryForm from "./InventoryForm";
 import { fetchAllPages } from "../../services/apiHelpers";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   product: "",
@@ -260,7 +261,7 @@ function Inventory() {
 
     try {
       await api.delete(`/inventory/${id}/`);
-      await refreshInventoryData();
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
     }

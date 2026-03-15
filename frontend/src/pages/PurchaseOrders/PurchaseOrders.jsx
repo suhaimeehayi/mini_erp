@@ -6,6 +6,7 @@ import PurchaseOrderDetail from "./PurchaseOrderDetail";
 import PurchaseOrderForm from "./PurchaseOrderForm";
 import { createPurchaseOrder, deletePurchaseOrder, updatePurchaseOrder } from "../../services/purchaseOrderService";
 import { fetchAllPages } from "../../services/apiHelpers";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   supplier: "",
@@ -57,7 +58,7 @@ function PurchaseOrders() {
 
     try {
       const supplierData = await fetchAllPages("/suppliers/");
-      setSuppliers(supplierData);
+      setSuppliers(supplierData.filter((supplier) => supplier.status === "active"));
     } catch (error) {
       console.error("Supplier fetch error", error);
     }
@@ -271,12 +272,7 @@ function PurchaseOrders() {
 
     try {
       await deletePurchaseOrder(id);
-
-      if (selectedOrder?.id === id) {
-        setSelectedOrder(null);
-      }
-
-      await refreshPurchaseData();
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
     }

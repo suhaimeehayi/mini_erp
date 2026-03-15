@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import ProductDetail from "./ProductDetail";
 import ProductForm from "./ProductForm";
 import { fetchAllPages } from "../../services/apiHelpers";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   name: "",
@@ -83,7 +84,7 @@ function Products() {
 
     try {
       const supplierData = await fetchAllPages("/suppliers/");
-      setSuppliers(supplierData);
+      setSuppliers(supplierData.filter((supplier) => supplier.status === "active"));
     } catch (error) {
       console.error("Supplier fetch error", error);
     }
@@ -308,12 +309,7 @@ function Products() {
 
     try {
       await api.delete(`/products/${id}/`);
-
-      if (selectedProduct?.id === id) {
-        setSelectedProduct(null);
-      }
-
-      await fetchPage(currentPage, currentSearch, sortKey, sortDirection);
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
     }

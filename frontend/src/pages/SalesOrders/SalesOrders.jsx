@@ -6,6 +6,7 @@ import SalesOrderDetail from "./SalesOrderDetail";
 import SalesOrderForm from "./SalesOrderForm";
 import { createSalesOrder, deleteSalesOrder, updateSalesOrder } from "../../services/salesOrderService";
 import { fetchAllPages } from "../../services/apiHelpers";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   customer: "",
@@ -14,6 +15,47 @@ const initialFormData = {
   selectedProduct: "",
   quantity: "",
   unitPrice: "",
+};
+
+const salesOrderStatusOptions = [
+  { value: "pending", label: "Pending" },
+  { value: "paid", label: "Paid" },
+  { value: "shipping", label: "Shipping" },
+  { value: "delivered", label: "Delivered" },
+];
+
+const extractErrorMessage = (error, fallbackMessage) => {
+  const errorData = error?.response?.data;
+
+  if (Array.isArray(errorData) && errorData.length > 0) {
+    return errorData[0];
+  }
+
+  if (typeof errorData === "string") {
+    return errorData;
+  }
+
+  if (errorData?.detail) {
+    return errorData.detail;
+  }
+
+  if (errorData?.error) {
+    return errorData.error;
+  }
+
+  if (errorData && typeof errorData === "object") {
+    const firstValue = Object.values(errorData)[0];
+
+    if (Array.isArray(firstValue) && firstValue.length > 0) {
+      return firstValue[0];
+    }
+
+    if (typeof firstValue === "string") {
+      return firstValue;
+    }
+  }
+
+  return fallbackMessage;
 };
 
 function SalesOrders() {
@@ -38,6 +80,7 @@ function SalesOrders() {
   const canEditSalesOrders = hasPermission("change_sales_orders");
   const canDeleteSalesOrders = hasPermission("delete_sales_orders");
   const canManageSalesOrders = canCreateSalesOrders || canEditSalesOrders;
+  const isDeliveredOrder = (order) => order?.status === "delivered";
 
   const scrollToSection = useCallback((sectionRef) => {
     window.requestAnimationFrame(() => {
@@ -57,7 +100,7 @@ function SalesOrders() {
 
     try {
       const customerData = await fetchAllPages("/customers/");
-      setCustomers(customerData);
+      setCustomers(customerData.filter((customer) => customer.status === "active"));
     } catch (error) {
       console.error("Customer fetch error", error);
     }
@@ -156,6 +199,13 @@ function SalesOrders() {
         [field]: undefined,
       }));
     }
+
+    if (errors.general) {
+      setErrors((previousErrors) => ({
+        ...previousErrors,
+        general: undefined,
+      }));
+    }
   };
 
   const searchSalesOrders = async () => {
@@ -203,11 +253,18 @@ function SalesOrders() {
       resetForm();
     } catch (error) {
       console.error(error);
+      setErrors({ general: extractErrorMessage(error, "Unable to create sales order.") });
     }
   };
 
   const editOrder = (order) => {
     if (!canEditSalesOrders) {
+      return;
+    }
+
+    if (isDeliveredOrder(order)) {
+      setErrors({ general: "Delivered sales orders cannot be edited." });
+      setIsFormOpen(false);
       return;
     }
 
@@ -258,6 +315,7 @@ function SalesOrders() {
       resetForm();
     } catch (error) {
       console.error(error);
+      setErrors({ general: extractErrorMessage(error, "Unable to update sales order.") });
     }
   };
 
@@ -266,19 +324,22 @@ function SalesOrders() {
       return;
     }
 
+    const orderToDelete = salesOrders.find((order) => order.id === id) || selectedOrder;
+
+    if (isDeliveredOrder(orderToDelete)) {
+      setErrors({ general: "Delivered sales orders cannot be deleted." });
+      return;
+    }
+
     const confirmDelete = window.confirm("Delete this sales order?");
     if (!confirmDelete) return;
 
     try {
       await deleteSalesOrder(id);
-
-      if (selectedOrder?.id === id) {
-        setSelectedOrder(null);
-      }
-
-      await refreshSalesData();
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
+      setErrors({ general: extractErrorMessage(error, "Unable to delete sales order.") });
     }
   };
 
@@ -304,6 +365,7 @@ function SalesOrders() {
           editId={editId}
           customers={customers}
           products={products}
+          statusOptions={salesOrderStatusOptions}
           isOpen={isFormOpen}
           onChange={handleInputChange}
           onSubmit={editId ? updateOrder : createOrder}

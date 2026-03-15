@@ -21,8 +21,25 @@ function SalesOrderDetail({
   canEdit,
   canDelete,
 }) {
+  const isDeliveredOrder = (order) => order.status === "delivered";
   const pendingOrders = salesOrders.filter((order) => order.status === "pending").length;
-  const shippedOrders = salesOrders.filter((order) => ["shipped", "delivered"].includes(order.status)).length;
+  const fulfilledOrders = salesOrders.filter((order) => ["shipping", "delivered"].includes(order.status)).length;
+
+  const getStatusClasses = (status) => {
+    if (status === "delivered") {
+      return "bg-emerald-100 text-emerald-800";
+    }
+    if (status === "shipping") {
+      return "bg-sky-100 text-sky-800";
+    }
+    if (status === "paid") {
+      return "bg-green-100 text-green-800";
+    }
+    if (status === "pending") {
+      return "bg-yellow-100 text-yellow-800";
+    }
+    return "bg-red-100 text-red-800";
+  };
 
   const columns = [
     { key: "order_id", label: "Order ID" },
@@ -37,17 +54,7 @@ function SalesOrderDetail({
       key: "status",
       label: "Status",
       render: (item) => (
-        <span className={`px-2 py-1 rounded text-xs font-medium ${
-          item.status === "paid"
-            ? "bg-green-100 text-green-800"
-            : item.status === "pending"
-              ? "bg-yellow-100 text-yellow-800"
-              : item.status === "shipped"
-                ? "bg-blue-100 text-blue-800"
-                : item.status === "delivered"
-                  ? "bg-purple-100 text-purple-800"
-                  : "bg-red-100 text-red-800"
-        }`}>
+        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusClasses(item.status)}`}>
           {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
         </span>
       ),
@@ -63,12 +70,20 @@ function SalesOrderDetail({
     ...(canEdit ? [{
       label: "Edit",
       onClick: onEdit,
-      className: "bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded-md text-sm",
+      disabled: isDeliveredOrder,
+      title: (order) => isDeliveredOrder(order) ? "Delivered orders cannot be edited" : "Edit sales order",
+      className: (_, isDisabled) => isDisabled
+        ? "bg-gray-200 text-gray-500 px-3 py-1 rounded-md text-sm cursor-not-allowed"
+        : "bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded-md text-sm",
     }] : []),
     ...(canDelete ? [{
       label: "Delete",
       onClick: (order) => onDelete(order.id),
-      className: "bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm",
+      disabled: isDeliveredOrder,
+      title: (order) => isDeliveredOrder(order) ? "Delivered orders cannot be deleted" : "Delete sales order",
+      className: (_, isDisabled) => isDisabled
+        ? "bg-gray-200 text-gray-500 px-3 py-1 rounded-md text-sm cursor-not-allowed"
+        : "bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm",
     }] : []),
   ];
 
@@ -129,8 +144,8 @@ function SalesOrderDetail({
           <p className="mt-2 text-3xl font-semibold text-amber-700">{pendingOrders}</p>
         </div>
         <div className="bg-white border rounded-xl shadow-sm p-5">
-          <p className="text-sm text-gray-500">Shipped / Delivered</p>
-          <p className="mt-2 text-3xl font-semibold text-blue-700">{shippedOrders}</p>
+          <p className="text-sm text-gray-500">Shipping / Delivered</p>
+          <p className="mt-2 text-3xl font-semibold text-blue-700">{fulfilledOrders}</p>
         </div>
       </div>
 
@@ -188,7 +203,9 @@ function SalesOrderDetail({
                     </div>
                     <div>
                       <p className="text-gray-500">Status</p>
-                      <p className="font-medium text-gray-900 capitalize">{selectedOrder.status || "-"}</p>
+                      <p className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(selectedOrder.status)}`}>
+                        {selectedOrder.status || "-"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-gray-500">Total</p>
@@ -199,6 +216,12 @@ function SalesOrderDetail({
                       <p className="font-medium text-gray-900">{selectedOrder.inventory_deducted ? "Yes" : "No"}</p>
                     </div>
                   </div>
+
+                  {selectedOrder.status === "delivered" && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      This order is delivered. Inventory has been finalized and editing is locked.
+                    </div>
+                  )}
 
                   <div>
                     <p className="text-gray-500 mb-2">Items</p>

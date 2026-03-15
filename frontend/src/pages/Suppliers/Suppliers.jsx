@@ -4,6 +4,7 @@ import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import SupplierDetail from "./SupplierDetail";
 import SupplierForm from "./SupplierForm";
+import { refreshCurrentPage } from "../../utils/pageRefresh";
 
 const initialFormData = {
   name: "",
@@ -15,6 +16,34 @@ const initialFormData = {
   taxNumber: "",
   website: "",
   status: "active",
+};
+
+const extractErrorMessage = (error, fallbackMessage) => {
+  const errorData = error?.response?.data;
+
+  if (Array.isArray(errorData) && errorData.length > 0) {
+    return errorData[0];
+  }
+
+  if (typeof errorData === "string") {
+    return errorData;
+  }
+
+  if (errorData?.detail) {
+    return errorData.detail;
+  }
+
+  if (errorData && typeof errorData === "object") {
+    const firstValue = Object.values(errorData)[0];
+    if (Array.isArray(firstValue) && firstValue.length > 0) {
+      return firstValue[0];
+    }
+    if (typeof firstValue === "string") {
+      return firstValue;
+    }
+  }
+
+  return fallbackMessage;
 };
 
 function Suppliers() {
@@ -134,6 +163,13 @@ function Suppliers() {
         [field]: undefined,
       }));
     }
+
+    if (errors.general) {
+      setErrors((previousErrors) => ({
+        ...previousErrors,
+        general: undefined,
+      }));
+    }
   };
 
   const searchSuppliers = async () => {
@@ -222,14 +258,10 @@ function Suppliers() {
 
     try {
       await api.delete(`/suppliers/${id}/`);
-
-      if (selectedSupplier?.id === id) {
-        setSelectedSupplier(null);
-      }
-
-      await fetchPage(currentPage, currentSearch, ordering);
+      refreshCurrentPage();
     } catch (error) {
       console.error(error);
+      setErrors({ general: extractErrorMessage(error, "Unable to delete supplier.") });
     }
   };
 
