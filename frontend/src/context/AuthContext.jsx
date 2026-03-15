@@ -1,5 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+import api from "../api/axios";
 import { refreshAccessTokenService } from "../services/authService";
 
 const AuthContext = createContext();
@@ -37,13 +39,9 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = useCallback(async () => {
     try {
-      const response = await api.get('/accounts/profiles/me/');
+      const response = await api.get('/accounts/users/me/');
       setUser(response.data);
-      // Extract permissions from role
-      if (response.data.role) {
-        const rolePermissions = response.data.role.permissions || [];
-        setPermissions(rolePermissions.map(p => p.codename));
-      }
+      setPermissions(response.data.effective_permissions || response.data.role_permissions || []);
     } catch (error) {
       console.error("Failed to fetch user profile:", error);
     }
@@ -103,18 +101,35 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem("access", tokens.access);
     localStorage.setItem("refresh", tokens.refresh);
     setIsAuthenticated(true);
+    fetchUserProfile();
   };
 
   const hasPermission = (permission) => {
     return permissions.includes(permission);
   };
 
+  const hasAnyPermission = (requiredPermissions = []) => {
+    if (!requiredPermissions.length) {
+      return true;
+    }
+
+    return requiredPermissions.some((permission) => hasPermission(permission));
+  };
+
+  const hasAllPermissions = (requiredPermissions = []) => {
+    if (!requiredPermissions.length) {
+      return true;
+    }
+
+    return requiredPermissions.every((permission) => hasPermission(permission));
+  };
+
   const isAdmin = () => {
-    return user?.role?.name === 'Admin' || user?.is_staff;
+    return user?.role_name === 'Admin' || user?.is_superuser;
   };
 
   const isManager = () => {
-    return user?.role?.name === 'Manager' || user?.is_staff;
+    return user?.role_name === 'Manager' || isAdmin();
   };
 
   return (
@@ -126,6 +141,8 @@ export const AuthProvider = ({ children }) => {
       logout,
       loading,
       hasPermission,
+      hasAnyPermission,
+      hasAllPermissions,
       isAdmin,
       isManager,
       fetchUserProfile

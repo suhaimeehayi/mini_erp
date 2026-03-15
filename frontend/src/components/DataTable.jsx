@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { data } from "react-router-dom";
 
 function DataTable({ data = [], columns, actions = [], loading = false, onSort }) {
 
@@ -91,21 +90,28 @@ function DataTable({ data = [], columns, actions = [], loading = false, onSort }
 
               {columns.map((col) => (
 
-                <th
-                  key={col.key}
-                  onClick={() => handleSort(col.key)}
-                  className="p-4 text-left text-gray-900 font-semibold cursor-pointer select-none"
-                >
+                (() => {
+                  const sortKeyValue = col.sortKey || col.key;
 
-                  <div className="flex items-center gap-2">
+                  return (
 
-                    {col.label}
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(sortKeyValue)}
+                      className="p-4 text-left text-gray-900 font-semibold cursor-pointer select-none"
+                    >
 
-                    {renderSortIcon(col.key)}
+                      <div className="flex items-center gap-2">
 
-                  </div>
+                        {col.label}
 
-                </th>
+                        {renderSortIcon(sortKeyValue)}
+
+                      </div>
+
+                    </th>
+                  );
+                })()
 
               ))}
 

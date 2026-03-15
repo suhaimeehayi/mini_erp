@@ -58,11 +58,12 @@ class SalesOrder(models.Model):
         for item in self.items.all():
             try:
                 inventory = Inventory.objects.get(product=item.product)
-                if inventory.quantity >= item.quantity:
-                    inventory.quantity -= item.quantity
-                    inventory.save()
-                else:
-                    raise ValueError(f"Insufficient inventory for {item.product.name}")
+                inventory.adjust_quantity(
+                    -item.quantity,
+                    movement_type='sale',
+                    reference=self.order_id,
+                    note=f'Sales order {self.order_id}',
+                )
             except Inventory.DoesNotExist:
                 raise ValueError(f"No inventory record for {item.product.name}")
         self.inventory_deducted = True

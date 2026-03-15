@@ -30,12 +30,23 @@ from .models import Product
 from .serializers import ProductSerializer
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+from apps.accounts.permissions import HasAssignedPermission
+
+
 class ProductViewSet(viewsets.ModelViewSet):
 
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     filter_backends = [SearchFilter]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAssignedPermission]
+    permission_codename_map = {
+        'list': 'view_products',
+        'retrieve': 'view_products',
+        'create': 'add_products',
+        'update': 'change_products',
+        'partial_update': 'change_products',
+        'destroy': 'delete_products',
+    }
 
     filter_backends = [
         DjangoFilterBackend,

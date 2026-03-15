@@ -6,6 +6,9 @@ from .models import SalesOrder
 def handle_sales_order_status_change(sender, instance, created, **kwargs):
     if created:
         return  # Skip for new orders
+
+    if not instance.items.exists():
+        return
     
     # Check if status changed to shipped or delivered
     if instance.status in ['shipped', 'delivered'] and not instance.inventory_deducted:

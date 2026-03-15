@@ -24,6 +24,7 @@ class Permission(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
+    direct_permissions = models.ManyToManyField('Permission', blank=True, related_name='user_profiles')
     phone = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     date_of_birth = models.DateField(null=True, blank=True)

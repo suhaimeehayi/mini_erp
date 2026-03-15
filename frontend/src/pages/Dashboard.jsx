@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
+import { getApiErrorMessage } from "../services/apiHelpers";
 
 import {
   BarChart,
@@ -19,66 +21,272 @@ import {
   Legend,
 } from "recharts";
 
+const INITIAL_STATS = {
+  users: 0,
+  products: 0,
+  inventory: 0,
+  customers: 0,
+  suppliers: 0,
+  purchases: 0,
+  sales: 0,
+  lowStock: 0,
+};
+
 function Dashboard() {
-  const [stats, setStats] = useState({
-    products: 0,
-    customers: 0,
-    suppliers: 0,
-  });
-  const [chartData, setChartData] = useState([]);
-  const fetchStats = async () => {
-    const products = await api.get("/products/");
-    const customers = await api.get("/customers/");
-    const suppliers = await api.get("/suppliers/");
+  const { permissions, loading: authLoading, isAdmin } = useAuth();
+  const metricConfigs = useMemo(() => ([
+    {
+      key: "users",
+      label: "Users",
+      path: "/accounts/users/",
+      permission: "view_users",
+      cardClassName: "bg-slate-50",
+      headingClassName: "text-slate-600",
+      valueClassName: "text-3xl font-bold text-slate-800",
+    },
+    {
+      key: "products",
+      label: "Products",
+      path: "/products/",
+      permission: "view_products",
+      cardClassName: "bg-blue-50",
+      headingClassName: "text-blue-600",
+      valueClassName: "text-3xl font-bold text-blue-800",
+    },
+    {
+      key: "inventory",
+      label: "Inventory",
+      path: "/inventory/",
+      permission: "view_inventory",
+      cardClassName: "bg-cyan-50",
+      headingClassName: "text-cyan-600",
+      valueClassName: "text-3xl font-bold text-cyan-800",
+    },
+    {
+      key: "customers",
+      label: "Customers",
+      path: "/customers/",
+      permission: "view_customers",
+      cardClassName: "bg-green-50",
+      headingClassName: "text-green-600",
+      valueClassName: "text-3xl font-bold text-green-800",
+    },
+    {
+      key: "suppliers",
+      label: "Suppliers",
+      path: "/suppliers/",
+      permission: "view_suppliers",
+      cardClassName: "bg-yellow-50",
+      headingClassName: "text-yellow-600",
+      valueClassName: "text-3xl font-bold text-yellow-800",
+    },
+    {
+      key: "purchases",
+      label: "Purchases",
+      path: "/purchase-orders/",
+      permission: "view_purchase_orders",
+      cardClassName: "bg-orange-50",
+      headingClassName: "text-orange-600",
+      valueClassName: "text-3xl font-bold text-orange-800",
+    },
+    {
+      key: "sales",
+      label: "Sales",
+      path: "/sales-orders/",
+      permission: "view_sales_orders",
+      cardClassName: "bg-indigo-50",
+      headingClassName: "text-indigo-600",
+      valueClassName: "text-3xl font-bold text-indigo-800",
+    },
+    {
+      key: "lowStock",
+      label: "Low Stock",
+      path: "/inventory/low_stock/",
+      permission: "view_inventory",
+      cardClassName: "bg-red-50",
+      headingClassName: "text-red-600",
+      valueClassName: "text-3xl font-bold text-red-800",
+    },
+  ]), []);
 
-    setStats({
-      products: products.data.count,
-      customers: customers.data.count,
-      suppliers: suppliers.data.count,
+  const isAdminAccount = isAdmin();
+  const visibleMetricConfigs = useMemo(() => {
+    return metricConfigs.filter((metric) => {
+      if (metric.key === "users") {
+        return isAdminAccount && permissions.includes(metric.permission);
+      }
+
+      return isAdminAccount || permissions.includes(metric.permission);
     });
+  }, [isAdminAccount, metricConfigs, permissions]);
 
-    setChartData([
-      { name: "Products", total: products.data.count },
-      { name: "Customers", total: customers.data.count },
-      { name: "Suppliers", total: suppliers.data.count },
-    ]);
+  const [stats, setStats] = useState(INITIAL_STATS);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const chartData = useMemo(() => {
+    return visibleMetricConfigs.map((metric) => ({
+      name: metric.label,
+      total: stats[metric.key],
+    }));
+  }, [stats, visibleMetricConfigs]);
+
+  const hasVisibleMetrics = visibleMetricConfigs.length > 0;
+
+  const hasChartData = useMemo(() => {
+    return chartData.some((item) => item.total > 0);
+  }, [chartData]);
+
+  const renderMetricValue = (value, className) => {
+    if (!loading && value === 0) {
+      return <p className="text-base font-medium text-gray-500">ไม่มีข้อมูล</p>;
+    }
+
+    return <p className={className}>{value}</p>;
   };
 
-  useEffect(() => {
-    const loadStats = async () => {
-      await fetchStats();
-    };
-    loadStats();
-  }, []);
+  const renderChartContent = (renderChart) => {
+    if (!hasChartData) {
+      return (
+        <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+          ไม่มีข้อมูล
+        </div>
+      );
+    }
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
+    return <ResponsiveContainer width="100%" height={300}>{renderChart()}</ResponsiveContainer>;
+  };
+
+  const getCountFromResponse = (result) => {
+    if (result.status !== "fulfilled") {
+      return 0;
+    }
+
+    const data = result.value?.data;
+    if (Array.isArray(data)) {
+      return data.length;
+    }
+
+    return typeof data?.count === "number" ? data.count : 0;
+  };
+
+  const fetchStats = useCallback(async () => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!hasVisibleMetrics) {
+      setStats(INITIAL_STATS);
+      setErrorMessage("");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+
+    const results = await Promise.allSettled(
+      visibleMetricConfigs.map((metric) => api.get(metric.path)),
+    );
+
+    const nextStats = visibleMetricConfigs.reduce((accumulator, metric, index) => {
+      accumulator[metric.key] = getCountFromResponse(results[index]);
+      return accumulator;
+    }, { ...INITIAL_STATS });
+
+    setStats(nextStats);
+
+    const failedResults = visibleMetricConfigs
+      .map((metric, index) => ({
+        ...metric,
+        result: results[index],
+      }))
+      .filter((entry) => entry.result.status === "rejected");
+
+    if (failedResults.length > 0) {
+      const firstFailure = failedResults[0];
+      const rawMessage = getApiErrorMessage(
+        firstFailure.result.reason,
+        `${firstFailure.label} data could not be loaded.`,
+      );
+      const safeMessage = typeof rawMessage === "string" && rawMessage.trim().startsWith("<")
+        ? `${firstFailure.label} data could not be loaded because the backend returned a server error.`
+        : rawMessage;
+
+      setErrorMessage(
+        failedResults.length === 1
+          ? safeMessage
+          : `${safeMessage} Failed metrics: ${failedResults.map((entry) => entry.label).join(", ")}.`,
+      );
+    }
+
+    setLoading(false);
+  }, [authLoading, hasVisibleMetrics, visibleMetricConfigs]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return undefined;
+    }
+
+    const timerId = setTimeout(() => {
+      fetchStats();
+    }, 0);
+
+    return () => clearTimeout(timerId);
+  }, [authLoading, fetchStats]);
+
+  const COLORS = ['#0ea5e9', '#2563eb', '#06b6d4', '#16a34a', '#ca8a04', '#ea580c', '#4f46e5', '#dc2626'];
 
   return (
     <div className="mt-10 bg-white p-6 shadow rounded">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">System Analytics Dashboard</h2>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-blue-50 p-4 rounded-lg shadow-sm">
-          <h3 className="text-lg font-semibold text-blue-600">Products</h3>
-          <p className="text-3xl font-bold text-blue-800">{stats.products}</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg shadow-sm">
-          <h3 className="text-lg font-semibold text-green-600">Customers</h3>
-          <p className="text-3xl font-bold text-green-800">{stats.customers}</p>
-        </div>
-        <div className="bg-yellow-50 p-4 rounded-lg shadow-sm">
-          <h3 className="text-lg font-semibold text-yellow-600">Suppliers</h3>
-          <p className="text-3xl font-bold text-yellow-800">{stats.suppliers}</p>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-800">System Analytics Dashboard</h2>
+        <button
+          type="button"
+          onClick={fetchStats}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+        >
+          Refresh
+        </button>
       </div>
 
+      {!authLoading && !hasVisibleMetrics && (
+        <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          You do not have permission to view dashboard metrics.
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {errorMessage}
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      {hasVisibleMetrics && (
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
+          {visibleMetricConfigs.map((metric) => (
+            <div key={metric.key} className={`${metric.cardClassName} rounded-lg p-4 shadow-sm`}>
+              <h3 className={`text-lg font-semibold ${metric.headingClassName}`}>{metric.label}</h3>
+              {renderMetricValue(stats[metric.key], metric.valueClassName)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(authLoading || loading) && hasVisibleMetrics && (
+        <div className="mb-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading dashboard metrics...
+        </div>
+      )}
+
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {hasVisibleMetrics && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Bar Chart */}
         <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Bar Chart - Entity Counts</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          {renderChartContent(() => (
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
@@ -86,13 +294,13 @@ function Dashboard() {
               <Tooltip />
               <Bar dataKey="total" fill="#8884d8" />
             </BarChart>
-          </ResponsiveContainer>
+          ))}
         </div>
 
         {/* Line Chart */}
         <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Line Chart - Trends</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          {renderChartContent(() => (
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
@@ -101,13 +309,13 @@ function Dashboard() {
               <Legend />
               <Line type="monotone" dataKey="total" stroke="#82ca9d" strokeWidth={3} />
             </LineChart>
-          </ResponsiveContainer>
+          ))}
         </div>
 
         {/* Pie Chart */}
         <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Pie Chart - Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          {renderChartContent(() => (
             <PieChart>
               <Pie
                 data={chartData}
@@ -125,13 +333,13 @@ function Dashboard() {
               </Pie>
               <Tooltip />
             </PieChart>
-          </ResponsiveContainer>
+          ))}
         </div>
 
         {/* Area Chart */}
         <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">Area Chart - Overview</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          {renderChartContent(() => (
             <AreaChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
@@ -139,9 +347,10 @@ function Dashboard() {
               <Tooltip />
               <Area type="monotone" dataKey="total" stroke="#ffc658" fill="#ffc658" />
             </AreaChart>
-          </ResponsiveContainer>
+          ))}
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

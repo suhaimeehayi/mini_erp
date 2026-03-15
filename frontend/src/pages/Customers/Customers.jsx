@@ -1,337 +1,296 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "../../api/axios";
-import toast, { Toaster } from "react-hot-toast";
-import Pagination from "../../components/Pagination";
-import ProductTable from "../../components/DataTable";
+import { useAuth } from "../../context/AuthContext";
+
+import CustomerForm from "./CustomerForm";
+import CustomerDetail from "./CustomerDetail";
+
+const initialFormData = {
+  name: "",
+  phone: "",
+  email: "",
+  company: "",
+  address: "",
+  taxNumber: "",
+  status: "active",
+};
 
 function Customers() {
+  const { hasPermission } = useAuth();
+  const formSectionRef = useRef(null);
+  const detailSectionRef = useRef(null);
   const [customers, setCustomers] = useState([]);
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [company, setCompany] = useState("");
-  const [address, setAddress] = useState("");
-  const [taxId, setTaxId] = useState("");
-  const [status, setStatus] = useState("active");
-
+  const [formData, setFormData] = useState(initialFormData);
+  const [errors, setErrors] = useState({});
   const [editId, setEditId] = useState(null);
-
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [isViewingCustomer, setIsViewingCustomer] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentSearch, setCurrentSearch] = useState("");
+  const canCreateCustomers = hasPermission("add_customers");
+  const canEditCustomers = hasPermission("change_customers");
+  const canDeleteCustomers = hasPermission("delete_customers");
+  const canManageCustomers = canCreateCustomers || canEditCustomers;
 
-  // =========================
-  // Pagination
-  // =========================
+  const scrollToSection = useCallback((sectionRef) => {
+    window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      sectionRef.current?.focus?.();
+    });
+  }, []);
 
-  const fetchPage = useCallback(async (page) => {
+  const validateForm = useCallback(() => {
+    const nextErrors = {};
+
+    if (!formData.name.trim()) {
+      nextErrors.name = "Name is required";
+    }
+
+    if (!formData.phone.trim()) {
+      nextErrors.phone = "Phone is required";
+    }
+
+    if (!formData.email.trim()) {
+      nextErrors.email = "Email is required";
+    }
+
+    if (!formData.company.trim()) {
+      nextErrors.company = "Company is required";
+    }
+
+    if (!formData.address.trim()) {
+      nextErrors.address = "Address is required";
+    }
+
+    if (!formData.taxNumber.trim()) {
+      nextErrors.taxNumber = "Tax number is required";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }, [formData]);
+
+  const fetchPage = useCallback(async (page, searchValue = currentSearch) => {
     try {
       const params = new URLSearchParams();
-      params.append('page', page);
-      if (currentSearch) params.append('search', currentSearch);
-      const url = `/customers/?${params.toString()}`;
-      const res = await api.get(url);
+      params.append("page", page);
+      if (searchValue) params.append("search", searchValue);
+
+      const res = await api.get(`/customers/?${params.toString()}`);
 
       setCustomers(res.data.results);
       setCurrentPage(page);
       setTotalPages(Math.ceil(res.data.count / 5));
+      setSelectedCustomer((previousCustomer) => {
+        if (!previousCustomer) {
+          return res.data.results[0] || null;
+        }
+
+        return res.data.results.find((customer) => customer.id === previousCustomer.id) || res.data.results[0] || null;
+      });
     } catch (error) {
       console.error(error);
     }
   }, [currentSearch]);
 
-  // =========================
-  // Fetch customers
-  // =========================
-
   const fetchCustomers = useCallback(async () => {
     await fetchPage(1);
   }, [fetchPage]);
 
-  // =========================
-  // Search
-  // =========================
-
   const searchCustomers = async () => {
     setCurrentSearch(search);
-    await fetchPage(1);
+    await fetchPage(1, search);
   };
-
-  // =========================
-  // Reset Form
-  // =========================
 
   const resetForm = () => {
     setEditId(null);
-    setName("");
-    setPhone("");
-    setEmail("");
-    setCompany("");
-    setAddress("");
-    setTaxId("");
-    setStatus("active");
+    setErrors({});
+    setFormData(initialFormData);
   };
 
-  // =========================
-  // Create
-  // =========================
+  const handleInputChange = (field, value) => {
+    setFormData((previousData) => ({
+      ...previousData,
+      [field]: value,
+    }));
+
+    if (errors[field]) {
+      setErrors((previousErrors) => ({
+        ...previousErrors,
+        [field]: undefined,
+      }));
+    }
+  };
+
+  const handleViewCustomer = async (customer) => {
+    setIsDetailOpen(true);
+    setIsViewingCustomer(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    setSelectedCustomer(customer);
+    setIsViewingCustomer(false);
+    scrollToSection(detailSectionRef);
+  };
 
   const createCustomer = async () => {
+    if (!canCreateCustomers) {
+      return;
+    }
+
+    if (!validateForm()) {
+      return;
+    }
+
     try {
-      await api.post("/customers/", {
-        name,
-        phone,
-        email,
-        company,
-        address,
-        tax_id: taxId,
-        status,
+      const response = await api.post("/customers/", {
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        company: formData.company,
+        address: formData.address,
+        tax_number: formData.taxNumber,
+        status: formData.status,
       });
 
-      toast.success("Customer created successfully");
       await fetchPage(1);
+      setSelectedCustomer(response.data);
+      setIsFormOpen(false);
+      setIsDetailOpen(true);
       resetForm();
     } catch (error) {
-      toast.error("Failed to create customer");
       console.error(error);
     }
   };
 
-  // =========================
-  // Edit
-  // =========================
+  const editCustomer = (customer) => {
+    if (!canEditCustomers) {
+      return;
+    }
 
-  const editCustomer = (c) => {
-    setEditId(c.id);
-
-    setName(c.name);
-    setPhone(c.phone);
-    setEmail(c.email);
-    setCompany(c.company);
-    setAddress(c.address);
-    setTaxId(c.tax_id);
-    setStatus(c.status);
+    setEditId(customer.id);
+    setSelectedCustomer(customer);
+    setIsFormOpen(true);
+    setIsDetailOpen(true);
+    setErrors({});
+    setFormData({
+      name: customer.name || "",
+      phone: customer.phone || "",
+      email: customer.email || "",
+      company: customer.company || "",
+      address: customer.address || "",
+      taxNumber: customer.tax_number || "",
+      status: customer.status || "active",
+    });
+    scrollToSection(formSectionRef);
   };
-
-  // =========================
-  // Update
-  // =========================
 
   const updateCustomer = async () => {
+    if (!canEditCustomers) {
+      return;
+    }
+
+    if (!validateForm()) {
+      return;
+    }
+
     try {
-      await api.put(`/customers/${editId}/`, {
-        name,
-        phone,
-        email,
-        company,
-        address,
-        tax_id: taxId,
-        status,
+      const response = await api.put(`/customers/${editId}/`, {
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        company: formData.company,
+        address: formData.address,
+        tax_number: formData.taxNumber,
+        status: formData.status,
       });
 
-      toast.success("Customer updated successfully");
-      await fetchPage(1);
+      await fetchPage(currentPage, currentSearch);
+      setSelectedCustomer(response.data);
+      setIsFormOpen(false);
+      setIsDetailOpen(true);
       resetForm();
     } catch (error) {
-      toast.error("Failed to update customer");
       console.error(error);
     }
   };
 
-  // =========================
-  // Delete
-  // =========================
-
   const deleteCustomer = async (id) => {
+    if (!canDeleteCustomers) {
+      return;
+    }
+
     const confirmDelete = window.confirm("Are you sure you want to delete this customer?");
     if (!confirmDelete) return;
 
     try {
       await api.delete(`/customers/${id}/`);
-      toast.success("Customer deleted successfully");
-      await fetchPage(1);
+
+      if (selectedCustomer?.id === id) {
+        setSelectedCustomer(null);
+      }
+
+      await fetchPage(currentPage, currentSearch);
     } catch (error) {
-      toast.error("Failed to delete customer");
       console.error(error);
     }
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    const timerId = setTimeout(() => {
+      fetchCustomers();
+    }, 0);
 
-  // =========================
-  // ProductTable Columns
-  // =========================
-
-  const columns = [
-    { key: "name", label: "Name" },
-
-    { key: "company", label: "Company" },
-
-    { key: "phone", label: "Phone" },
-
-    { key: "email", label: "Email" },
-
-    {
-      key: "status",
-      label: "Status",
-      render: (item) => (
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-medium ${
-            item.status === "active"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-700"
-          }`}
-        >
-          {item.status}
-        </span>
-      ),
-    },
-
-    {
-      key: "action",
-      label: "Action",
-      render: (item) => (
-        <div className="flex gap-2">
-          <button
-            onClick={() => editCustomer(item)}
-            className="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1 rounded-md text-sm"
-          >
-            Edit
-          </button>
-
-          <button
-            onClick={() => deleteCustomer(item.id)}
-            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm"
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
-  ];
+    return () => clearTimeout(timerId);
+  }, [fetchCustomers]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 text-gray-800">
-      <Toaster position="top-right" />
-
       <h1 className="text-3xl font-semibold mb-6">Customers</h1>
 
-      {/* Search */}
-      <div className="bg-white border rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex gap-3 flex-wrap">
-          <input
-            type="text"
-            placeholder="Search customers..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1"
-          />
+      {canManageCustomers && (
+        <CustomerForm
+          formSectionRef={formSectionRef}
+          formData={formData}
+          errors={errors}
+          editId={editId}
+          isOpen={isFormOpen}
+          onChange={handleInputChange}
+          onSubmit={editId ? updateCustomer : createCustomer}
+          onCancel={resetForm}
+          onToggle={() => setIsFormOpen((previous) => !previous)}
+        />
+      )}
 
-          <button
-            onClick={searchCustomers}
-            className="bg-blue-500 text-white px-5 py-2 rounded-lg"
-          >
-            Search
-          </button>
-
-          <button
-            onClick={() => {
-              setSearch("");
-              setCurrentSearch("");
-              fetchPage(1);
-            }}
-            className="bg-gray-500 text-white px-5 py-2 rounded-lg"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
-      {/* Form */}
-
-      <div className="bg-white border rounded-xl shadow-sm p-5 mb-6">
-        <div className="flex flex-wrap gap-3">
-          <input
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[150px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <input
-            placeholder="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[150px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <input
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <input
-            placeholder="Company"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <input
-            placeholder="Address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <input
-            placeholder="Tax ID"
-            value={taxId}
-            onChange={(e) => setTaxId(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[150px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="border rounded-lg px-3 py-2 flex-1 min-w-[150px] focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-
-          <button
-            onClick={editId ? updateCustomer : createCustomer}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg transition"
-          >
-            {editId ? "Update" : "Add"}
-          </button>
-
-          {editId && (
-            <button
-              onClick={resetForm}
-              className="bg-gray-400 text-white px-5 py-2 rounded-lg"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Table */}
-
-      <div className="bg-white border rounded-xl shadow-sm p-6">
-        <ProductTable data={customers} columns={columns} />
-      </div>
-
-      {/* Pagination */}
-      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={fetchPage} />
+      <CustomerDetail
+        detailSectionRef={detailSectionRef}
+        customers={customers}
+        selectedCustomer={selectedCustomer}
+        isViewingCustomer={isViewingCustomer}
+        isOpen={isDetailOpen}
+        search={search}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onSelectCustomer={handleViewCustomer}
+        onSearchChange={setSearch}
+        onSearch={searchCustomers}
+        onReset={() => {
+          setSearch("");
+          setCurrentSearch("");
+          fetchPage(1, "");
+        }}
+        onEdit={editCustomer}
+        onDelete={deleteCustomer}
+        onPageChange={fetchPage}
+        onToggle={() => setIsDetailOpen((previous) => !previous)}
+        canEdit={canEditCustomers}
+        canDelete={canDeleteCustomers}
+      />
     </div>
   );
 }

@@ -1,13 +1,26 @@
 from django.shortcuts import render
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from apps.accounts.permissions import HasAssignedPermission
 from .models import SalesOrder
 from .serializers import SalesOrderSerializer
 
 class SalesOrderViewSet(viewsets.ModelViewSet):
     queryset = SalesOrder.objects.all().order_by('-created_at')
     serializer_class = SalesOrderSerializer
+    permission_classes = [IsAuthenticated, HasAssignedPermission]
+    permission_codename_map = {
+        'list': 'view_sales_orders',
+        'retrieve': 'view_sales_orders',
+        'create': 'add_sales_orders',
+        'update': 'change_sales_orders',
+        'partial_update': 'change_sales_orders',
+        'destroy': 'delete_sales_orders',
+        'change_status': 'change_sales_orders',
+    }
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
